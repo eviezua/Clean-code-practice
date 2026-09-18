@@ -2,43 +2,70 @@
 
 namespace App\Loyalty;
 
-class ProcessData
+class CashbackCalculator
 {
-    private array $lst; //user list
+    private array $cart;
+    private float $percent;
 
-    public function __construct(array $lst)
+    private int $thresholdPrice;
+
+    public function __construct(array $cart, float $percent = 0.05, int $thresholdPrice = 0)
     {
-        $this->lst = $lst;
+        $this->cart = $cart;
+        $this->percent = $percent;
+        $this->thresholdPrice = $thresholdPrice;
     }
 
-    public function getIt(): array
+    public function filterOrdersForCashback(): array
     {
-        $resList = [];
+        $filteredCart = [];
 
-        foreach ($this->lst as $item) {
-            // if status done and sum greater than 100
-            if ($item[1] === 5 && $item[2] > 100) {
-                $dt = new \DateTimeImmutable($item[3]);
-                $now = new \DateTimeImmutable();
-
-                // Less than 30 days ago
-                $diffInDays = $now->diff($dt)->days;
-
-                if ($diffInDays <= 30) {
-                    $resList[] = $item;
-                }
+        foreach ($this->cart as $item) {
+            if ($this->isDone($item['status']) && $this->reachesThresholdPrice($item['totalPrice']) && $this->lessThanMonthAgo($item['date'])) {
+                $filteredCart[] = $item;
             }
         }
 
-        return $resList;
+        return $filteredCart;
     }
 
-    public function calcPnts(array $dataInfo): int
+    public function calculateCashback(array $orders): int
     {
-        $p = 0;
-        foreach ($dataInfo as $subItem) {
-            $p += (int)($subItem[2] * 0.05);
+        $totalBonus = 0;
+
+        foreach ($orders as $item) {
+            $totalBonus += (int)($item['totalPrice'] * $this->percent);
         }
-        return $p;
+        return $totalBonus;
+    }
+
+    private function isDone(string $status): bool
+    {
+        if ($status === 'Done') {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function reachesThresholdPrice(int $price): bool
+    {
+        if ($price > $this->thresholdPrice) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function lessThanMonthAgo(string $date): bool
+    {
+        $orderDate = new \DateTimeImmutable($date);
+        $currentDate = new \DateTimeImmutable();
+
+        if ($orderDate->diff($currentDate)->days <= 30) {
+            return true;
+        }
+
+        return false;
     }
 }
