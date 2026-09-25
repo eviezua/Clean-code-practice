@@ -4,29 +4,38 @@ namespace App\Report;
 
 final class UserReportGenerator
 {
-    private function formatRow(User $user, int $index): string
-    {
-        return sprintf("%d. %s <%s>", $index, $user->getName(), $user->getEmail());
-    }
+    public function __construct(
+        private LoggerInterface $logger,
+        private string $appEnv
+    ) {}
 
     public function generate(array $users): string
     {
-        $header = "User Report\n===========";
-        $formattedRows = [];
-        $footer = "Total users: " . count($users);
-
         // ... 10 lines of logging and setup ...
-        $this->logGenerationStart(count($users));
 
-        if (empty($users)) return "No users found.";
+        $totalUsers = count($users);
 
-        $counter = 1;
-        foreach ($users as $user) {
-            if(!$user->isActive()) continue;
-            $formattedRows[]=$this->formatRow($user,$counter++);
+        $header = "User Report\n===========";
+        $footer = "Total users: " . $totalUsers;
+
+        if (empty($users)) {
+            return "No users found.";
         }
 
-        return $this->assembleReport($header,$formattedRows,$footer);
+        $this->logGenerationStart($totalUsers);
+
+        $counter = 1;
+        $formattedRows = [];
+
+        foreach ($users as $user) {
+            if (!$user->isActive()) {
+                continue;
+            }
+
+            $formattedRows[] = $this->formatRow($user, $counter++);
+        }
+
+        return $this->assembleReport($header, $formattedRows, $footer);
     }
 
     private function logGenerationStart(int $count): void
@@ -34,18 +43,15 @@ final class UserReportGenerator
         $this->logger->info("Starting report generation", ['count' => $count]);
     }
 
-    private LoggerInterface $logger   ;
-    private string          $appEnv   ;
-
-    public function __construct(LoggerInterface $logger, string $appEnv)
+    private function formatRow(User $user, int $index): string
     {
-        $this->logger = $logger;
-        $this->appEnv = $appEnv;
+        return sprintf("%d. %s <%s>", $index, $user->getName(), $user->getEmail());
     }
 
     private function assembleReport(string $header, array $rows, string $footer): string
     {
         $content = implode("\n", $rows);
+
         return $header . "\n\n" . $content . "\n\n" . $footer;
     }
 }
