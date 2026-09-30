@@ -41,6 +41,39 @@ final readonly class ProcessData
 
 namespace App\Order;
 
+class Warehouse
+{
+    public function hasStockForOrder(Order $order): bool
+    {
+        foreach ($order->getItems() as $item) {
+            if (!$this->hasStock($item->getId(), $item->getQuantity())) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function hasStock(int $itemId, int $quantity): bool
+    {
+        // checking quantity inside object
+
+        $availableQuantity = $this->productRepository->getQuantity($itemId);
+
+        return $availableQuantity >= $quantity;
+    }
+
+    public function markAsPriority(int $orderId): void
+    {
+        // logic for setting priority
+    }
+}
+?>
+
+<?php
+
+namespace App\Order;
+
 use App\DTO\ProcessData;
 use App\Dto\User;
 use App\Exception\InvalidPromocodeException;
@@ -64,21 +97,19 @@ class OrderProcessor
         $this->applyPromocodeIfExists($data->order, $data->promoCode);
         $this->handleExpress($data->order, $data->isExpress);
 
-        $bonus = $this->calculateBonus($data->user->getId(), $data->useBonus);
+        $bonus = $this->calculateBonus($data->user, $data->useBonus);
         $this->applyBonus($data->order, $bonus);
 
         $this->chargePayment($data->order, $data->user);
-        $this->withdrawBonus($data->user->getId(), $bonus);
+        $this->withdrawBonus($data->user, $bonus);
 
-        $this->sendMessage($data->isExpress, $data->order->getId(), $data->user->getEmail());
+        $this->sendMessage($data->isExpress, $data->order, $data->user);
     }
     private function itemsInStock(Order $order): void
     {
-        foreach ($order->getItems() as $item) {
-            if (!$this->warehouse->hasStock($item->getId(), $item->getQuantity())) {
-                $this->logger->error("Item out of stock: " . $item->getId());
-                throw new OutOfStockException('Item out of stock: ' . $item->getId());
-            }
+        if (!$this->warehouse->hasStockForOrder($order)) {
+            $this->logger->error("Item out of stock: " . $order->getId());
+            throw new OutOfStockException('Item out of stock: ' . $order->getId());
         }
     }
 
@@ -104,13 +135,13 @@ class OrderProcessor
         $this->warehouse->markAsPriority($order->getId());
     }
 
-    private function calculateBonus(int $userId, bool $useBonus): float
+    private function calculateBonus(User $user, bool $useBonus): float
     {
         if (!$useBonus){
             return 0.00;
         }
 
-        return $this->bonuses->getUserBonuses($userId);
+        return $this->bonuses->getUserBonuses($user);
     }
 
     private function applyBonus(Order $order, float $bonusAmount): void
@@ -128,19 +159,22 @@ class OrderProcessor
         }
     }
 
-    private function withdrawBonus(int $userId, float $bonusAmount): void
+    private function withdrawBonus(User $user, float $bonusAmount): void
     {
-        $this->bonuses->withdraw($userId, $bonusAmount);
+        $this->bonuses->withdraw($user, $bonusAmount);
     }
 
-    private function sendMessage(bool $isExpress, int $orderId, string $email): void
+    private function sendMessage(bool $isExpress, Order $order, User $user): void
     {
+        $email = $user->getEmail();
+        $orderId = $order->getId();
+
         $typeOfDelivery = $isExpress ? "Express" : "Standard";
 
         $msg = sprintf("%s order %s confirmed for %s", strtoupper($typeOfDelivery), $orderId, $email);
 
         $this->email->send($email, $msg);
 
-        $this->logger->info($typeOfDelivery . "order notification sent");
+        $this->logger->info($typeOfDelivery . " order notification sent");
     }
 }
