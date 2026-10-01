@@ -6,73 +6,51 @@ use Exception;
 
 class Subscription
 {
-    private string $id;
-    private string $userId;
-    private string $status; // 'active', 'paused', 'expired', 'canceled'
-    private DateTimeImmutable $expiresAt;
-    private int $remainingPauseDays = 30;
+    private ?int $id = null;
 
-    public function getId(): string { return $this->id; }
-    public function setId(string $id): void { $this->id = $id; }
+    public function __construct(
+        private readonly User $user,
+        private DateTimeImmutable $expiresAt,
+        private string $status = 'active', // 'active', 'paused', 'expired', 'canceled'
+        private int $remainingPauseDays = 30
+    ) {}
 
-    public function getUserId(): string { return $this->userId; }
-    public function setUserId(string $userId): void { $this->userId = $userId; }
-
-    public function getStatus(): string { return $this->status; }
-    public function setStatus(string $status): void { $this->status = $status; }
-
-    public function getExpiresAt(): DateTimeImmutable { return $this->expiresAt; }
-    public function setExpiresAt(DateTimeImmutable $expiresAt): void { $this->expiresAt = $expiresAt; }
-
-    public function getRemainingPauseDays(): int { return $this->remainingPauseDays; }
-    public function setRemainingPauseDays(int $days): void { $this->remainingPauseDays = $days; }
-}
-
-class SubscriptionManager
-{
-    public function createSubscription(string $subscriptionId, string $userId, int $days): Subscription
+    public function getId(): ?int
     {
-        $subscription = new Subscription();
-        $subscription->setId($subscriptionId);
-        $subscription->setUserId($userId);
-        $subscription->setStatus('active');
-        $subscription->setExpiresAt((new DateTimeImmutable())->modify("+{$days} days"));
-
-        return $subscription;
+        return $this->id;
     }
 
-    public function renewSubscription(Subscription $subscription, int $days): void
+    public function renew(int $days): void
     {
         $now = new DateTimeImmutable();
 
-        if ($subscription->getExpiresAt() < $now) {
-            $newExpiration = $now->modify("+{$days} days");
+        if ($this->expiresAt < $now) {
+            $newExpiresAt = $now->modify("+{$days} days");
         } else {
-            $newExpiration = $subscription->getExpiresAt()->modify("+{$days} days");
+            $newExpiresAt = $this->expiresAt->modify("+{$days} days");
         }
 
-        $subscription->setExpiresAt($newExpiration);
-        $subscription->setStatus('active');
+        $this->expiresAt = $newExpiresAt;
+        $this->status = 'active';
     }
 
-    public function pauseSubscription(Subscription $subscription, int $pauseDays): void
+    public function pause(int $pauseDays): void
     {
-        if ($subscription->getStatus() !== 'active') {
+        if ($this->status !== 'active') {
             throw new Exception("Only active subscriptions can be paused");
         }
 
-        if ($subscription->getRemainingPauseDays() < $pauseDays) {
+        if ($this->remainingPauseDays < $pauseDays) {
             throw new Exception("Not enough pause days remaining");
         }
 
-        $subscription->setRemainingPauseDays($subscription->getRemainingPauseDays() - $pauseDays);
-        $subscription->setExpiresAt($subscription->getExpiresAt()->modify("+{$pauseDays} days"));
-        $subscription->setStatus('paused');
+        $this->remainingPauseDays -= $pauseDays;
+        $this->expiresAt = $this->expiresAt->modify("+{$pauseDays} days");
+        $this->status = 'paused';
     }
 
-    public function isSubscriptionActive(Subscription $subscription): bool
+    public function isActive(): bool
     {
-        return $subscription->getStatus() === 'active'
-            && $subscription->getExpiresAt() > new DateTimeImmutable();
+        return $this->status === 'active' && $this->expiresAt > new DateTimeImmutable();
     }
 }
