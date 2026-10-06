@@ -1,55 +1,31 @@
 <?php
 
-namespace App\Service;
+namespace App\Delivery;
 
-use Exception;
-use GuzzleHttp\Client as GuzzleClient;
-use GuzzleHttp\Exception\RequestException;
+interface DeliveryService {
+    public function dispatchOrder(Order $order): string;
+}
+?>
 
-class ShippingService
+<?php
+
+namespace App\Delivery\Adapter;
+
+use App\Delivery\DeliveryService;
+use App\Delivery\Order;
+use App\Exception\DeliveryException;
+
+final readonly class GuzzleCourierAdapter implements DeliveryService
 {
-    private GuzzleClient $httpClient;
-    private array $shipmentRates = [];
+    public function __construct(
+        private GuzzleClient $httpClient
+    ){}
 
-    public function __construct(GuzzleClient $httpClient)
+    public function dispatchOrder(Order $order): string
     {
-        $this->httpClient = $httpClient;
-    }
+        $orderId = $order->getId();
+        $address = $order->getAddress();
 
-    public function getActiveShipments(): ?array
-    {
-        $hasShipments = false;
-
-        if (!$hasShipments) {
-            return null;
-        }
-
-        return $this->shipmentRates;
-    }
-
-    public function calculateShippingCost(string $zipCode, float $weight): float
-    {
-        try {
-            $discount = $this->findRegionalDiscount($zipCode);
-            $baseRate = 50.0;
-
-            return ($baseRate - $discount) * $weight;
-        } catch (Exception $e) {
-            return 50.0 * $weight;
-        }
-    }
-
-    private function findRegionalDiscount(string $zipCode): float
-    {
-        if ($zipCode !== '01001') {
-            throw new Exception("Discount not found for zip");
-        }
-
-        return 10.0;
-    }
-
-    public function dispatchOrder(int $orderId, string $address): string
-    {
         try {
             //Example API, not existing
             $response = $this->httpClient->post('https://api.courier.com/v1/dispatch', [
@@ -59,14 +35,116 @@ class ShippingService
             $data = json_decode($response->getBody()->getContents(), true);
 
             return $data['tracking_number'];
-        } catch (RequestException $e) {
-            throw $e;
+        } catch (\Throwable $e) {
+            throw new DeliveryException("Failed to dispatch order", previous: $e);
         }
     }
+}
+?>
 
-    public function notifyCustomerBySms(string $phone, string $trackingNumber): void
+<?php
+
+namespace App\Exception;
+
+use RuntimeException;
+
+class DeliveryException extends RuntimeException {}
+
+?>
+
+<?php
+
+namespace App\Shipment;
+
+use App\Delivery\Order;
+
+readonly class RatesCalculator
+{
+    private const BASE_RATE = 50.0;
+
+    public function calculateShippingCost(Order $order): float
     {
-        $vendorSdk = new \Vendor\SmsSdk\Client('api_key_123');
-        $vendorSdk->sendSmsRaw($phone, "Tracking: " . $trackingNumber);
+        $zipCode = $order->getZipCode();
+        $weight = $order->getWeight();
+
+        $discount = $this->findRegionalDiscount($zipCode);
+
+        return (self::BASE_RATE - $discount) * $weight;
+    }
+
+    private function findRegionalDiscount(string $zipCode): float
+    {
+        if ($zipCode === '01001') {
+            return 10.0;
+        }
+
+        return 0.00;
+    }
+}
+?>
+
+<?php
+
+namespace App\Notification;
+
+interface Notifier
+{
+    public function send(string $phone, string $trackingNumber): void;
+}
+
+?>
+
+<?php
+
+namespace App\Notification;
+
+use \Vendor\SmsSdk\Client as Client;
+
+readonly class SmsNotifier implements Notifier
+{
+    public function __construct(
+        private Client $client
+    ) {}
+    public function send(string $phone, string $trackingNumber): void
+    {
+        $this->client->sendSmsRaw($phone, "Tracking: " . $trackingNumber);
+    }
+}
+?>
+
+<?php
+
+namespace App\Service;
+
+use App\Notification\Notifier;
+use App\Shipment\RatesCalculator;
+use App\Delivery\DeliveryService;
+use App\Delivery\Order;
+
+class ShippingService
+{
+    public function __construct(
+        private RatesCalculator $calculator,
+        private DeliveryService $delivery,
+        private Notifier $notifier
+    ) {}
+
+    public function getActiveShipments(): array
+    {
+        return [];
+    }
+
+    public function calculateCost(Order $order): float
+    {
+        return $this->calculator->calculateShippingCost($order);
+    }
+
+    public function process(Order $order): string
+    {
+        $trackingNumber = $this->delivery->dispatchOrder($order);
+
+        $this->notifier->send($order->getCustomerPhone(), $trackingNumber);
+
+        return $trackingNumber;
     }
 }
