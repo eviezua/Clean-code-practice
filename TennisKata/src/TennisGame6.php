@@ -1,8 +1,6 @@
 <?php
 
-namespace TennisGame\src;
-
-use TennisGame\TennisGame;
+namespace App;
 
 class TennisGame6 implements TennisGame {
     private $player1Name;
