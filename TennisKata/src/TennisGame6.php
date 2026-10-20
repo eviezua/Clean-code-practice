@@ -3,90 +3,72 @@
 namespace App;
 
 class TennisGame6 implements TennisGame {
-    private $player1Name;
-    private $player2Name;
-    private $player1Score = 0;
-    private $player2Score = 0;
 
-    public function __construct($player1Name, $player2Name)
-    {
-        $this->player1Name = $player1Name;
-        $this->player2Name = $player2Name;
+    public function __construct(
+        private readonly Player $player1,
+        private readonly Player $player2
+    ) {
     }
 
-    public function wonPoint($playerName): void
+    public function wonPoint(Player $player): void
     {
-        if ($playerName === "player1") {
-            $this->player1Score++;
-        } else {
-            $this->player2Score++;
+        if ($player === $this->player1 || $player === $this->player2) {
+            $player->addPoint();
         }
     }
 
     public function getScore(): string
     {
-        $result = "";
+        $player1Score = $this->player1->getScore();
+        $player2Score = $this->player2->getScore();
 
-        if ($this->player1Score == $this->player2Score) {
-            // tie score
-            switch ($this->player1Score) {
-                case 0:
-                    $result = "Love-All";
-                    break;
-                case 1:
-                    $result = "Fifteen-All";
-                    break;
-                case 2:
-                    $result = "Thirty-All";
-                    break;
-                default:
-                    $result = "Deuce";
-                    break;
-            }
-        } else if ($this->player1Score >= 4 || $this->player2Score >= 4) {
-            // end-game score
-            if ($this->player1Score - $this->player2Score == 1) {
-                $result = "Advantage " . $this->player1Name;
-            } else if ($this->player1Score - $this->player2Score == -1) {
-                $result = "Advantage " . $this->player2Name;
-            } else if ($this->player1Score - $this->player2Score >= 2) {
-                $result = "Win for " . $this->player1Name;
-            } else {
-                $result = "Win for " . $this->player2Name;
-            }
-        } else {
-            // regular score
-            switch ($this->player1Score) {
-                case 0:
-                    $score1 = "Love";
-                    break;
-                case 1:
-                    $score1 = "Fifteen";
-                    break;
-                case 2:
-                    $score1 = "Thirty";
-                    break;
-                default:
-                    $score1 = "Forty";
-                    break;
-            }
-            switch ($this->player2Score) {
-                case 0:
-                    $score2 = "Love";
-                    break;
-                case 1:
-                    $score2 = "Fifteen";
-                    break;
-                case 2:
-                    $score2 = "Thirty";
-                    break;
-                default:
-                    $score2 = "Forty";
-                    break;
-            }
-            $result = $score1 . "-" . $score2;
+        if ($player1Score == $player2Score) {
+            return $this->tieScore($player1Score);
         }
 
-        return $result;
+        if ($player1Score >= 4 || $player2Score >= 4) {
+            return $this->endGameScore($player1Score, $player2Score);
+        }
+
+        return $this->regularScore($player1Score, $player2Score);
+    }
+
+    private function tieScore(int $score): string
+    {
+        if ($score <= 2) {
+            return $this->getScoreLabel($score) . '-All';
+        }
+
+        return 'Deuce';
+    }
+
+    private function endGameScore(int $score1, int $score2): string
+    {
+        $scoreDifference = abs($score1 - $score2);
+
+        if ($scoreDifference == 1) {
+            return "Advantage " . $this->determineLeader($score1, $score2);
+        }
+
+        return "Win for " . $this->determineLeader($score1, $score2);
+    }
+
+    private function regularScore(int $score1, int $score2): string
+    {
+        return $this->getScoreLabel($score1) . "-" . $this->getScoreLabel($score2);
+    }
+
+    private function determineLeader(int $score1, int $score2): string
+    {
+        if ($score1 > $score2) {
+            return $this->player1->getName();
+        }
+
+        return $this->player2->getName();
+    }
+
+    private function getScoreLabel(int $score): string
+    {
+        return ScoreNames::estimateLabelByScore($score);
     }
 }

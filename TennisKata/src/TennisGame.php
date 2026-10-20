@@ -6,7 +6,7 @@ namespace App;
 
 interface TennisGame
 {
-    public function wonPoint(string $playerName): void;
+    public function wonPoint(Player $player): void;
 
     public function getScore(): string;
 }

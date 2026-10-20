@@ -4,12 +4,22 @@ declare(strict_types=1);
 
 namespace App\Tests;
 
+use App\Player;
 use App\TennisGame;
 use PHPUnit\Framework\TestCase;
 
 abstract class TestMaster extends TestCase
 {
     protected TennisGame $game;
+    protected Player $player1;
+    protected Player $player2;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->player1 = new Player('player1');
+        $this->player2 = new Player('player2');
+    }
 
     /**
      * @return mixed[][]
@@ -58,10 +68,10 @@ abstract class TestMaster extends TestCase
         $highestScore = max($score1, $score2);
         for ($i = 0; $i < $highestScore; $i++) {
             if ($i < $score1) {
-                $this->game->wonPoint('player1');
+                $this->game->wonPoint($this->player1);
             }
             if ($i < $score2) {
-                $this->game->wonPoint('player2');
+                $this->game->wonPoint($this->player2);
             }
         }
     }
